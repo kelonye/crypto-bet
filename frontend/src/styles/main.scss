@@ -1,0 +1,104 @@
+@charset "utf-8";
+
+$primary: hsl(217, 71%, 53%); // hsl(204, 71%, 53%);
+$tabs-link-active-border-bottom-color: $primary;
+$tabs-link-active-color: $primary;
+$tabs-toggle-link-active-background-color: $primary;
+$tabs-toggle-link-active-border-color: $primary;
+
+$dark-0: #212121;
+$dark-1: #424242;
+
+$scheme-main: $dark-1;
+$scheme-invert: #fff;
+
+@import '~bulma/bulma';
+
+:root {
+  --dark-0: white;
+  --dark-1: white;
+  --border-color: #999;
+  --dot-active-color: #{$yellow}
+}
+
+body {
+  font-family: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  padding: 0 50px 0;
+}
+
+.dark {
+  --dark-0: #{$dark-0};
+  --dark-1: #{$dark-1};
+  --border-color: #999;
+  --dot-active-color: #{$yellow};
+
+  &,
+  body {
+    background: $dark-0 !important;
+    color: white;
+  }
+
+  .table,
+  .table thead td, .table thead th,
+  .input, .select select, .textarea {
+    color: $scheme-invert;
+  }
+
+  .table td, .table th {
+    border-color: $dark-1;
+  }
+}
+
+#nprogress .bar {
+  z-index: 10000000000 !important;
+}
+
+#nprogress .bar {
+  background: $primary !important;
+}
+
+#nprogress .peg {
+  box-shadow: 0 0 10px $primary, 0 0 5px $primary !important;
+}
+
+#nprogress .spinner-icon {
+  display: none;
+  border-top-color: $primary !important;
+  border-left-color: $primary !important;
+}
+
+.button {
+  border-bottom: 3px solid !important;
+
+  &.is-light {
+    border-bottom-color: #aaa !important;
+  }
+
+  &.is-primary {
+    border-bottom-color: $primary-dark !important;
+  }
+
+  &.is-info {
+    border-bottom-color: $info-dark !important;
+  }
+
+  &.is-success {
+    border-bottom-color: $success-dark !important;
+  }
+
+  &.is-warning {
+    border-bottom-color: $warning-dark !important;
+  }
+
+  &.is-danger {
+    border-bottom-color: $danger-dark !important;
+  }
+
+  &.is-link {
+    border-bottom-color: $link-dark !important;
+  }
+}
+
+.dark input::placeholder {
+  color: #999;
+}

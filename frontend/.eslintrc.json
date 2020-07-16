@@ -1,0 +1,51 @@
+{
+  "parser": "babel-eslint",
+  "parserOptions": {
+    "sourceType": "module",
+    "allowImportExportEverywhere": true
+  },
+  "plugins": ["prefer-object-spread", "cypress", "svelte3"],
+  "overrides": [
+    {
+      "files": ["**/*.svelte"],
+      "processor": "svelte3/svelte3"
+    }
+  ],
+  "rules": {
+    "arrow-spacing": "warn",
+    "brace-style": "warn",
+    "comma-dangle": "off",
+    "curly": "error",
+    "eqeqeq": ["error", "smart"],
+    "key-spacing": "error",
+    "keyword-spacing": "warn",
+    "max-len": "warn",
+    "no-console": "off",
+    "no-constant-condition": "off",
+    "no-eq-null": "warn",
+    "no-prototype-builtins": "warn",
+    "no-restricted-globals": ["error", "event", "name", "context"],
+    "no-restricted-syntax": ["error", "ForOfStatement"],
+    "no-var": "warn",
+    "object-shorthand": "warn",
+    "prefer-const": "error",
+    "prefer-object-spread/prefer-object-spread": "error",
+    "prettier/prettier": "warn",
+    "require-atomic-updates": "off",
+    "quotes": ["warn", "single"],
+    "semi": "error",
+    "space-before-blocks": ["warn", "always"]
+  },
+  "extends": ["eslint:recommended", "plugin:prettier/recommended"],
+  "env": {
+    "browser": true,
+    "commonjs": true,
+    "es6": true,
+    "node": true,
+    "jquery": true,
+    "cypress/globals": true
+  },
+  "globals": {
+    "chrome": true
+  }
+}

@@ -1,0 +1,5 @@
+NOTES.md
+.DS_Store
+yarn.lock
+# Local Netlify folder
+.netlify

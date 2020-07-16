@@ -1,0 +1,11 @@
+
+[build]
+  publish = "public/"
+  functions = "api/"
+  ignore = "git diff --quiet HEAD^ HEAD ../../"
+
+[[redirects]]
+  # SPA only
+  from = "/*"
+  to = "/__app.html"
+  status = 200
