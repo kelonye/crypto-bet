@@ -1,18 +1,12 @@
-pragma solidity ^0.6.0;
+pragma solidity >=0.6.0 <0.7.0;
+pragma experimental ABIEncoderV2;
 
 import "@chainlink/contracts/src/v0.6/interfaces/AggregatorInterface.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import "./Dai.sol";
 
 // Adapted from https://github.com/stampery-labs/witnet-tokenprice-example-contracts/blob/master/contracts/TokenPriceContest.sol
-
-// Adding only the ERC-20 function we need
-interface DaiToken {
-    function transfer(address dst, uint256 wad) external returns (bool);
-
-    function balanceOf(address guy) external view returns (uint256);
-}
-
 contract Bet {
     using SignedSafeMath for int256;
     using SafeMath for uint256;
@@ -22,7 +16,7 @@ contract Bet {
     AggregatorInterface[] internal chainlinkTokenRefs;
 
     // DAI token ref
-    DaiToken internal dai;
+    IDai internal dai;
 
     // Event emitted when a bet is placed by a contest participant
     event BetPlaced(uint8 day, uint8 tokenId, address sender, uint256 value);
@@ -53,8 +47,10 @@ contract Bet {
     struct DayInfo {
         // total prize for a day
         uint256 grandPrize;
-        // token prices: [token][start, end]
-        int256[][2] prices;
+        // token perfs percentages
+        int256[] perfs;
+        // ordered ranking after result has been resolved
+        uint8[] ranking;
     }
 
     // Mapping of day infos
@@ -71,7 +67,7 @@ contract Bet {
     ) public {
         firstDay = _firstDay;
         contestPeriod = _contestPeriod;
-        dai = DaiToken(_dai);
+        dai = IDai(_dai);
 
         chainlinkTokenRefs = new AggregatorInterface[](
             _chainlinkTokenAddresses.length
@@ -83,64 +79,82 @@ contract Bet {
         }
     }
 
-    // /// @dev Places a bet on a token identifier
-    // /// @param _tokenId token identifier
-    // function placeBet(uint8 _tokenId, uint256 amt) public payable {
-    //   require(msg.value > 0, "Should insert a positive amount");
-    //   require(_tokenId < tokenLimit, "Should insert a valid token identifier");
+    /// @dev Places a bet on a token identifier
+    /// @param _tokenId token identifier
+    function placeBet(uint8 _tokenId, uint256 amt) public {
+        require(
+            _tokenId < chainlinkTokenRefs.length,
+            "Should insert a valid token identifier"
+        );
+        require(amt > 0, "Should insert a positive amount");
+        require(
+            dai.balanceOf(msg.sender) >= amt &&
+                dai.allowance(msg.sender, address(this)) >= amt,
+            "Should have enough dai"
+        );
+        dai.transferFrom(msg.sender, address(this), amt);
 
-    //   // uint256 amt = msg.value;
-    //   require(dai.balanceOf(msg.sender) >= amt && dai.allowance(msg.sender, address(this)) >= amt, "Should have enough dai");
-    //   dai.transferFrom(msg.sender, address(this), amt);
+        // Calculate the day of the current bet
+        uint8 betDay = getCurrentDay();
+        // Create Bet: u8Concat
+        uint16 betId = u8Concat(betDay, _tokenId);
 
-    //   // Calculate the day of the current bet
-    //   uint8 betDay = getCurrentDay();
-    //   // Create Bet: u8Concat
-    //   uint16 betId = u8Concat(betDay, _tokenId);
+        // Upsert Bets mapping (day||tokenId) with TokenDay
+        bets[betId].totalAmount = bets[betId].totalAmount + amt;
+        bets[betId].participations[msg.sender] += amt;
+        bets[betId].paid[msg.sender] = false;
 
-    //   // Upsert Bets mapping (day||tokenId) with TokenDay
-    //   bets[betId].totalAmount = bets[betId].totalAmount + msg.value;
-    //   bets[betId].participations[msg.sender] += msg.value;
-    //   bets[betId].paid[msg.sender] = false;
+        // Upsert DayInfo (day)
+        dayInfos[betDay].grandPrize = dayInfos[betDay].grandPrize + amt;
 
-    //   // Upsert DayInfo (day)
-    //   dayInfos[betDay].grandPrize = dayInfos[betDay].grandPrize + msg.value;
+        emit BetPlaced(betDay, _tokenId, msg.sender, amt);
+    }
 
-    //   emit BetPlaced(betDay, _tokenId, msg.sender, msg.value);
-    // }
+    /// @dev Pays out upon data request resolution (i.e. state should be `PAYOUT`)
+    /// @param _day contest day of the payout
+    function payout(uint8 _day) public payable {
+        require(
+            getDayState(_day) == DayState.PAYOUT,
+            "Should be in PAYOUT state"
+        );
 
-    // /// @dev Pays out upon data request resolution (i.e. state should be `PAYOUT`)
-    // /// @param _day contest day of the payout
-    // function payout(uint8 _day) public payable {
-    //   require(
-    //     getDayState(_day) == DayState.PAYOUT,
-    //     "Should be in PAYOUT state"
-    //   );
-
-    //   // Result was read but with an error (payout participations)
-    //   if (dayInfos[_day].result.length == 0) {
-    //     uint16 offset = u8Concat(_day, 0);
-    //     for (uint16 i = 0; i<tokenLimit; i++) {
-    //       if (bets[i+offset].paid[msg.sender] == false &&
-    //         bets[i+offset].participations[msg.sender] > 0) {
-    //         bets[i+offset].paid[msg.sender] = true;
-    //         msg.sender.transfer(bets[i+offset].participations[msg.sender]);
-    //       }
-    //     }
-    //   } else { // Result is Ok (payout to winners)
-    //     // Check legit payout
-    //     uint16 dayTokenId = u8Concat(_day, dayInfos[_day].ranking[0]);
-    //     require(bets[dayTokenId].paid[msg.sender] == false, "Address already paid");
-    //     require(bets[dayTokenId].participations[msg.sender] > 0, "Address has no bets in the winning token");
-    //     // Prize calculation
-    //     uint256 grandPrize = dayInfos[_day].grandPrize;
-    //     uint256 winnerAmount = bets[dayTokenId].totalAmount;
-    //     uint256 prize = bets[dayTokenId].participations[msg.sender] * grandPrize / winnerAmount;
-    //     // Set paid flag and Transfer
-    //     bets[dayTokenId].paid[msg.sender] = true;
-    //     msg.sender.transfer(prize);
-    //   }
-    // }
+        // Result not okay, payout participations
+        if (!getDayResultIsReady(_day)) {
+            uint16 offset = u8Concat(_day, 0);
+            for (uint16 i = 0; i < chainlinkTokenRefs.length; i++) {
+                if (
+                    bets[i + offset].paid[msg.sender] == false &&
+                    bets[i + offset].participations[msg.sender] > 0
+                ) {
+                    bets[i + offset].paid[msg.sender] = true;
+                    dai.transfer(
+                        msg.sender,
+                        bets[i + offset].participations[msg.sender]
+                    );
+                }
+            }
+        } else {
+            // Result is Ok (payout to winners)
+            // Check legit payout
+            uint16 dayTokenId = u8Concat(_day, dayInfos[_day].ranking[0]);
+            require(
+                bets[dayTokenId].paid[msg.sender] == false,
+                "Address already paid"
+            );
+            require(
+                bets[dayTokenId].participations[msg.sender] > 0,
+                "Address has no bets in the winning token"
+            );
+            // Prize calculation
+            uint256 grandPrize = dayInfos[_day].grandPrize;
+            uint256 winnerAmount = bets[dayTokenId].totalAmount;
+            uint256 prize = (bets[dayTokenId].participations[msg.sender] *
+                grandPrize) / winnerAmount;
+            // Set paid flag and Transfer
+            bets[dayTokenId].paid[msg.sender] = true;
+            dai.transfer(msg.sender, prize);
+        }
+    }
 
     /// @dev Gets the timestamp of the current block as seconds since unix epoch
     /// @return timestamp
@@ -155,34 +169,49 @@ contract Bet {
         view
         returns (int256[] memory, uint8[] memory)
     {
-        int256[] memory requestResult = new int256[](chainlinkTokenRefs.length);
-        for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
-            uint16 betId = u8Concat(0, i);
-            // TokenDay memory bet = bets[betId];
-            int256 perf = 0;
-            require(bets[betId].startPrice == 1, "s 1");
-            require(bets[betId].endPrice == 3, "e 3");
-            if (bets[betId].startPrice != 0 && bets[betId].endPrice != 0) {
-                perf = (bets[betId].endPrice.sub(bets[betId].startPrice))
-                    .div(bets[betId].startPrice)
-                    .mul(100);
-            }
-            requestResult[i] = perf;
-        }
-        return (requestResult, rank(requestResult));
+        // int256[] memory requestResult = new int256[](chainlinkTokenRefs.length);
+        // for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
+        //     uint16 betId = u8Concat(_day, i);
+        //     TokenDay memory bet = bets[betId];
+        //     int256 perf = 0;
+        //     if (bet.startPrice != 0 && bet.endPrice != 0) {
+        //         perf = (bet.endPrice.sub(bet.startPrice))
+        //             .div(bet.startPrice)
+        //             .mul(100);
+        //     }
+        //     requestResult[i] = perf;
+        // }
+        // return (requestResult, rank(requestResult));
+        return (dayInfos[_day].perfs, dayInfos[_day].ranking);
     }
 
     function saveCurrentDayRankingFromChainlink() public {
         uint8 betDay = getCurrentDay();
         for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
-            uint16 betId = u8Concat(0, i);
-            int256 latest = 1; // getLatestTokenPrice(i);
+            uint16 betId = u8Concat(betDay, i);
+            int256 latest = getLatestTokenPrice(i);
             if (bets[betId].startPrice == 0) {
                 bets[betId].startPrice = latest;
             } else {
                 bets[betId].endPrice = latest;
             }
         }
+
+        int256[] memory requestResult = new int256[](chainlinkTokenRefs.length);
+        for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
+            uint16 betId = u8Concat(betDay, i);
+            TokenDay memory bet = bets[betId];
+            int256 perf = 0;
+            if (bet.startPrice != 0 && bet.endPrice != 0) {
+                perf = (bet.endPrice.sub(bet.startPrice))
+                    .div(bet.startPrice)
+                    .mul(100);
+            }
+            requestResult[i] = perf;
+        }
+
+        dayInfos[betDay].perfs = requestResult;
+        dayInfos[betDay].ranking = rank(requestResult);
     }
 
     function getLatestTokenPrice(uint256 tokenId)
@@ -194,111 +223,114 @@ contract Bet {
         return ref.latestAnswer();
     }
 
-    // /// @dev Gets a contest day state
-    // /// @param _day contest day
-    // /// @return day state
-    // function getDayState(uint8 _day) public returns (DayState) {
-    //   uint8 currentDay = getCurrentDay();
-    //   if (_day == currentDay) {
-    //     return DayState.BET;
-    //   } else if (_day > currentDay) {
-    //     // Bet in the future
-    //     return DayState.INVALID;
-    //   } else if (dayInfos[_day].grandPrize == 0) {
-    //     // BetDay is in the past but there were no bets
-    //     return DayState.PAYOUT;
-    //   } else if (_day == currentDay - 1) {
-    //     // Drawing day
-    //     return DayState.DRAWING;
-    //   }  else {
-    //     // BetDay is in the past with bets
-    //     return DayState.PAYOUT;
-    //   }
-    // }
+    /// @dev Gets a contest day state
+    /// @param _day contest day
+    /// @return day state
+    function getDayState(uint8 _day) public returns (DayState) {
+        uint8 currentDay = getCurrentDay();
+        if (_day == currentDay) {
+            return DayState.BET;
+        } else if (_day > currentDay) {
+            // Bet in the future
+            return DayState.INVALID;
+        } else if (dayInfos[_day].grandPrize == 0) {
+            // BetDay is in the past but there were no bets
+            return DayState.PAYOUT;
+        } else if (_day == currentDay - 1) {
+            // Drawing day
+            return DayState.DRAWING;
+        } else {
+            // BetDay is in the past with bets
+            return DayState.PAYOUT;
+        }
+    }
 
-    // /// @dev Reads the total amount bet for a day and a token identifier
-    // /// @param _day contest day
-    // /// @param _tokenId token identifier
-    // /// @return total amount of bets
-    // function getTotalAmountTokenDay(uint8 _day, uint8 _tokenId) public view returns (uint256) {
-    //   return bets[u8Concat(_day, _tokenId)].totalAmount;
-    // }
+    /// @dev Reads the total amount bet for a day and a token identifier
+    /// @param _day contest day
+    /// @param _tokenId token identifier
+    /// @return total amount of bets
+    function getTotalAmountTokenDay(uint8 _day, uint8 _tokenId)
+        public
+        view
+        returns (uint256)
+    {
+        return bets[u8Concat(_day, _tokenId)].totalAmount;
+    }
 
-    // /// @dev Reads the participations of the sender for a given day
-    // /// @param _day contest day
-    // /// @return array with the participations for each token
-    // function getMyBetsDay(uint8 _day) public view returns (uint256[] memory) {
-    //   uint256[] memory results = new uint256[](tokenLimit);
-    //   uint16 offset = u8Concat(_day, 0);
-    //   for (uint16 i = 0; i<tokenLimit; i++) {
-    //     results[i] = bets[i+offset].participations[msg.sender];
-    //   }
-    //   return results;
-    // }
+    /// @dev Reads the participations of the sender for a given day
+    /// @param _day contest day
+    /// @return array with the participations for each token
+    function getMyBetsDay(uint8 _day) public view returns (uint256[] memory) {
+        uint256[] memory results = new uint256[](chainlinkTokenRefs.length);
+        uint16 offset = u8Concat(_day, 0);
+        for (uint16 i = 0; i < chainlinkTokenRefs.length; i++) {
+            results[i] = bets[i + offset].participations[msg.sender];
+        }
+        return results;
+    }
 
-    // /// @dev Reads the participations and wins of the sender for a given day
-    // /// @param _day contest day
-    // /// @return array with the participations for each token
-    // function getMyBetsDayWins(uint8 _day) public view returns (uint256[] memory, uint256) {
-    //   uint256[] memory results = getMyBetsDay(_day);
-    //   uint256 amount = getMyDayWins(_day);
-    //   return (results, amount);
-    // }
+    /// @dev Reads the participations and wins of the sender for a given day
+    /// @param _day contest day
+    /// @return array with the participations for each token
+    function getMyBetsDayWins(uint8 _day)
+        public
+        view
+        returns (uint256[] memory, uint256)
+    {
+        uint256[] memory results = getMyBetsDay(_day);
+        uint256 amount = getMyDayWins(_day);
+        return (results, amount);
+    }
 
-    // function getMyDayWins(uint8 _day) public view returns (uint256) {
-    //   uint256 amount;
-    //   // Data request is not yet resolved or is still beeing resolved within Witnet
-    //   if (dayInfos[_day].witnetRequestId == 0 || !isResultReady(_day)) {
-    //     return amount;
-    //   }
+    function getMyDayWins(uint8 _day) public view returns (uint256) {
+        uint256 amount;
+        // Data request is not yet resolved or is still beeing resolved within Witnet
+        if (!getDayResultIsReady(_day)) {
+            return amount;
+        }
 
-    //   // Data request is already in WBI or in the contract
-    //   uint8[] memory ranking = new uint8[](tokenLimit);
+        // Data request is already in WBI or in the contract
+        uint8[] memory ranking = dayInfos[_day].ranking;
 
-    //   // Calculate Ranking
-    //   if (dayInfos[_day].witnetReadResult) {
-    //     ranking = dayInfos[_day].ranking;
-    //   } else { // Data request is in WBI but not in contract -> read from WBI
-    //     Witnet.Result memory result = witnetReadResult(dayInfos[_day].witnetRequestId);
-    //     if (result.isOk()) {
-    //       // Data Request is OK -> compute...
-    //       ranking = rank(result.asInt128Array());
-    //     }
-    //   }
+        // Empty ranking -> return back participations
+        if (ranking.length == 0) {
+            // Data request with ERROR -> return money to all participants
+            uint16 offset = u8Concat(_day, 0);
+            for (uint16 i = 0; i < chainlinkTokenRefs.length; i++) {
+                if (
+                    bets[i + offset].paid[msg.sender] == false &&
+                    bets[i + offset].participations[msg.sender] > 0
+                ) {
+                    // bets[i+offset].paid[msg.sender] = true;
+                    amount += bets[i + offset].participations[msg.sender];
+                }
+            }
+            return amount;
+        }
 
-    //   // Empty ranking -> return back participations
-    //   if (ranking.length == 0) {
-    //     // Data request with ERROR -> return money to all participants
-    //     uint16 offset = u8Concat(_day, 0);
-    //     for (uint16 i = 0; i<tokenLimit; i++) {
-    //       if (bets[i+offset].paid[msg.sender] == false &&
-    //         bets[i+offset].participations[msg.sender] > 0) {
-    //         // bets[i+offset].paid[msg.sender] = true;
-    //         amount += bets[i+offset].participations[msg.sender];
-    //       }
-    //     }
-    //     return amount;
-    //   }
+        // Ranking available -> compute prize for participant
+        uint16 dayTokenId = u8Concat(_day, ranking[0]);
+        // Already paid or not participated
+        if (
+            bets[dayTokenId].paid[msg.sender] ||
+            bets[dayTokenId].participations[msg.sender] == 0
+        ) {
+            return amount;
+        }
+        // Prize calculation
+        uint256 grandPrize = dayInfos[_day].grandPrize;
+        uint256 winnerAmount = bets[dayTokenId].totalAmount;
+        uint256 prize = (bets[dayTokenId].participations[msg.sender] *
+            grandPrize) / winnerAmount;
 
-    //   // Ranking available -> compute prize for participant
-    //   uint16 dayTokenId = u8Concat(_day, ranking[0]);
-    //   // Already paid or not participated
-    //   if (bets[dayTokenId].paid[msg.sender] || bets[dayTokenId].participations[msg.sender] == 0) {
-    //     return amount;
-    //   }
-    //   // Prize calculation
-    //   uint256 grandPrize = dayInfos[_day].grandPrize;
-    //   uint256 winnerAmount = bets[dayTokenId].totalAmount;
-    //   uint256 prize = bets[dayTokenId].participations[msg.sender] * grandPrize / winnerAmount;
+        return prize;
+    }
 
-    //   return prize;
-    // }
-
-    // /// @dev Reads day information
-    // /// @param _day contest day
-    // /// @return day info structure
+    /// @dev Reads day information
+    /// @param _day contest day
+    /// @return day info structure
     // function getDayInfo(uint8 _day) public view returns (DayInfo memory) {
-    //   return dayInfos[_day];
+    //     return dayInfos[_day];
     // }
 
     /// @dev Read last block timestamp and calculate difference with firstDay timestamp
@@ -308,6 +340,11 @@ contract Bet {
         uint256 daysDiff = (timestamp - firstDay) / contestPeriod;
 
         return uint8(daysDiff);
+    }
+
+    function getDayResultIsReady(uint8 _day) private view returns (bool) {
+        uint16 betId = u8Concat(_day, 0);
+        return bets[betId].endPrice != 0;
     }
 
     /// @dev Concatenates two `uint8`

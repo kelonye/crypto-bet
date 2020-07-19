@@ -1,5 +1,6 @@
 const moment = require("moment")
 const Bet = artifacts.require("Bet")
+const Dai = artifacts.require("Dai")
 
 const dai = {
   mainnet: "0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -19,17 +20,25 @@ const tokens = {
   ],
 }
 
-module.exports = (deployer, network, [defaultAccount]) => {
+module.exports = async function (deployer, network, [defaultAccount]) {
   network = network.split("-")[0]
 
   const firstDay = moment("2020-07-01").unix()
   const day = 60 * 60 * 24
-  const daiAddress =
-    dai[network] || "0x0853E36EeAd0eAA08D61E94237168696383869DD"
-  const tokenAddresses =
-    tokens[network] ||
-    new Array(tokens.mainnet.length).fill(
+
+  let daiAddress = dai[network]
+  let tokenAddresses = tokens[network]
+
+  if (!daiAddress) {
+    await deployer.deploy(Dai, "DAI", "DAI")
+    daiAddress = Dai.address
+  }
+  if (!tokenAddresses) {
+    // todo
+    tokenAddresses = new Array(tokens.mainnet.length).fill(
       "0x0853E36EeAd0eAA08D61E94237168696383869DD"
     )
+  }
+
   deployer.deploy(Bet, firstDay, day, daiAddress, tokenAddresses)
 }

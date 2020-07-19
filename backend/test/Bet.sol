@@ -26,7 +26,7 @@ contract BetTesthelper is Bet {
         override
         returns (int256)
     {
-        return 1;
+        return int256(tokenId) + price;
     }
 
     function setLatestTokenPrice(int256 _price) public {

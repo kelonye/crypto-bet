@@ -1,8 +1,8 @@
-const BetTestHelper = artifacts.require("BetTestHelper")
 const truffleAssert = require("truffle-assertions")
+const Bet = artifacts.require("BetTestHelper")
+const Dai = artifacts.require("Dai")
 
-const NOOP_ADDR = "0x0853E36EeAd0eAA08D61E94237168696383869DD"
-const NO_OF_TOKENS = 3
+const NO_OF_TOKENS = 10
 const FIRST_DAY = Math.round(new Date().getTime() / 1000 - 100)
 
 contract("BetTestHelper", (accounts) => {
@@ -16,15 +16,18 @@ contract("BetTestHelper", (accounts) => {
 
   before(async () => {
     const day = 60 * 60 * 24
-    contest = await BetTestHelper.new(
+
+    dai = await Dai.new("DAI", "DAI")
+
+    contest = await Bet.new(
       FIRST_DAY,
       day,
-      NOOP_ADDR,
+      dai.address,
       new Array(NO_OF_TOKENS).fill("0x0853E36EeAd0eAA08D61E94237168696383869DD")
     )
   })
 
-  xdescribe("Concatenate uint8 into uint16: ", () => {
+  describe("Concatenate uint8 into uint16: ", () => {
     it("should concat 0xff 0xee", async () => {
       const result = await contest.u8ConcatPub.call(
         web3.utils.hexToBytes("0xff"),
@@ -48,7 +51,7 @@ contract("BetTestHelper", (accounts) => {
     })
   })
 
-  xdescribe("Rank int128 array: ", () => {
+  describe("Rank int128 array: ", () => {
     it("should rank [3, 0, 15, 5, 6, 8, 6, 1]", async () => {
       const result = await contest.rankPub.call([3, 0, 15, 5, 6, 8, 6, 1])
       const expected = [2, 5, 6, 4, 3, 0, 7, 1]
@@ -67,62 +70,64 @@ contract("BetTestHelper", (accounts) => {
     })
   })
 
-  // describe("Get day states: ", () => {
-  //   const day0 = Math.round(new Date().getTime() / 1000)
-  //   const now0 = day0 + 2 * 60 * 60
-  //   const now1 = day0 + 26 * 60 * 60
+  describe("Get day states: ", () => {
+    const day0 = Math.round(new Date().getTime() / 1000)
+    const now0 = day0 + 2 * 60 * 60
+    const now1 = day0 + 26 * 60 * 60
 
-  //   it("should get day state BET because its today", async () => {
-  //     const tx = contest.setTimestamp(now0)
-  //     waitForHash(tx)
-  //     const result = await contest.getDayState.call(0)
-  //     assert.equal(result.toNumber(), DayState.BET)
-  //   })
-  //   it("should get day state PAYOUT because (for yesterday and no bets)", async () => {
-  //     const tx = contest.setTimestamp(now1)
-  //     waitForHash(tx)
-  //     const result = await contest.getDayState.call(0)
-  //     assert.equal(result.toNumber(), DayState.PAYOUT)
-  //   })
-  //   it("should get day state INVALID because is for tomorrow", async () => {
-  //     const tx = contest.setTimestamp(now0)
-  //     waitForHash(tx)
-  //     const result = await contest.getDayState.call(1)
-  //     assert.equal(result.toNumber(), DayState.INVALID)
-  //   })
-  // })
+    it("should get day state BET because its today", async () => {
+      await contest.setTimestamp(now0, {
+        from: accounts[1],
+      })
+      const result = await contest.getDayState.call(0)
+      assert.equal(result.toNumber(), DayState.BET)
+    })
+    it("should get day state PAYOUT because (for yesterday and no bets)", async () => {
+      await contest.setTimestamp(now1, {
+        from: accounts[1],
+      })
+      const result = await contest.getDayState.call(0)
+      assert.equal(result.toNumber(), DayState.PAYOUT)
+    })
+    it("should get day state INVALID because is for tomorrow", async () => {
+      await contest.setTimestamp(now0, {
+        from: accounts[1],
+      })
+      const result = await contest.getDayState.call(1)
+      assert.equal(result.toNumber(), DayState.INVALID)
+    })
+  })
 
   describe("Cron: ", () => {
     it("Should set latest price", async () => {
       await contest.setTimestamp(FIRST_DAY, {
         from: accounts[1],
       })
-      console.log((await contest.getCurrentDay.call()).toNumber())
-      // let result = await contest.getDayRankingFromChainlink.call(0)
+      let result = await contest.getDayRankingFromChainlink.call(0)
+      assert.equal(result["0"].length, 0)
       //
       await contest.setLatestTokenPrice(1, {
         from: accounts[1],
       })
-      await contest.saveCurrentDayRankingFromChainlink.call({
+      await contest.saveCurrentDayRankingFromChainlink({
         from: accounts[1],
       })
       //
       await contest.setLatestTokenPrice(3, {
         from: accounts[1],
       })
-      await contest.saveCurrentDayRankingFromChainlink.call({
+      await contest.saveCurrentDayRankingFromChainlink({
         from: accounts[1],
       })
       //
       result = await contest.getDayRankingFromChainlink.call(0)
       assert.equal(result["0"][0].toNumber(), 200)
-      assert.equal(result["1"][0].toNumber(), 2)
+      assert.equal(result["1"][0].toNumber(), 0)
       assert.equal(result["1"][1].toNumber(), 1)
-      assert.equal(result["1"][2].toNumber(), 0)
     })
   })
 
-  xdescribe("Place bets: ", () => {
+  describe("Place bets: ", () => {
     const day0 = Math.round(new Date().getTime() / 1000)
     const now1 = day0 + 26 * 60 * 60
     const now2 = day0 + 52 * 60 * 60
@@ -135,82 +140,96 @@ contract("BetTestHelper", (accounts) => {
       const result = await contest.getTimestamp.call()
       assert.equal(day0, result)
     })
+    it("should read that there is no bet", async () => {
+      const result = await contest.getTotalAmountTokenDay.call(0, 0)
+      assert.equal(result, web3.utils.toWei("0", "ether"))
+    })
+    it("should be able to place bet", async () => {
+      await [accounts[1]].map((account) => {
+        // account 1 has 10 mil dai
+        // send half to account 2
+        return dai.transfer(account, web3.utils.toWei("5000000", "wei"))
+      })
+      await [accounts[0], accounts[1]].map(async (account) => {
+        return dai.approve(
+          contest.address,
+          web3.utils.toWei("5000000", "wei"),
+          {
+            from: account,
+          }
+        )
+      })
 
-    //   it("should read that there is no bet", async () => {
-    //     const result = await contest.getTotalAmountTokenDay.call(0, 0)
-    //     assert.equal(result, web3.utils.toWei("0", "ether"))
-    //   })
-    //   it("should be able to place bet", async () => {
-    //     const tx = contest.placeBet(0, {
-    //       from: accounts[0],
-    //       value: web3.utils.toWei("1000", "wei"),
-    //     })
-    //     waitForHash(tx)
-    //   })
-    //   it("should be revert due to place bet with 0 value", async () => {
-    //     await truffleAssert.reverts(
-    //       contest.placeBet(0, {
-    //         from: accounts[0],
-    //         value: web3.utils.toWei("0", "wei"),
-    //       }),
-    //       "Should insert a positive amount"
-    //     )
-    //   })
-    //   it("should read the total amount of previous bet", async () => {
-    //     const result = await contest.getTotalAmountTokenDay.call(0, 0)
-    //     assert.equal(result, web3.utils.toWei("1000", "wei"))
-    //   })
-    //   it("should be able to place a second bet", async () => {
-    //     const tx = contest.placeBet(1, {
-    //       from: accounts[0],
-    //       value: web3.utils.toWei("1000", "wei"),
-    //     })
-    //     waitForHash(tx)
-    //   })
-    //   it("should read the total amount of the day", async () => {
-    //     const result = await contest.getDayInfo.call(0)
-    //     assert.equal(result[0], web3.utils.toWei("2000", "wei"))
-    //   })
-    //   it("should read my total bets of the day", async () => {
-    //     const result = await contest.getMyBetsDay.call(0)
-    //     assert.equal(result[0], web3.utils.toWei("1000", "wei"))
-    //     assert.equal(result[1], web3.utils.toWei("1000", "wei"))
-    //     assert.equal(result[6], web3.utils.toWei("0", "wei"))
-    //   })
-    //   it("should be able to place a third bet from another address", async () => {
-    //     const tx = contest.placeBet(6, {
-    //       from: accounts[1],
-    //       value: web3.utils.toWei("1000", "wei"),
-    //     })
-    //     waitForHash(tx)
-    //   })
-    //   it("should read bets from another address", async () => {
-    //     const result = await contest.getMyBetsDay.call(0, {from: accounts[1]})
-    //     assert.equal(result[0], web3.utils.toWei("0", "wei"))
-    //     assert.equal(result[1], web3.utils.toWei("0", "wei"))
-    //     assert.equal(result[6], web3.utils.toWei("1000", "wei"))
-    //   })
+      assert.equal(
+        (await dai.balanceOf(accounts[0])).toNumber(),
+        web3.utils.toWei("5000000", "wei")
+      )
+      assert.equal(
+        (await dai.allowance(accounts[0], contest.address)).toNumber(),
+        web3.utils.toWei("5000000", "wei")
+      )
+      await contest.placeBet(0, web3.utils.toWei("1000", "wei"), {
+        from: accounts[0],
+      })
+      assert.equal(
+        (await dai.balanceOf(accounts[0])).toNumber(),
+        web3.utils.toWei("4999000", "wei")
+      )
+    })
+    it("should be revert due to place bet with 0 value", async () => {
+      await truffleAssert.reverts(
+        contest.placeBet(0, web3.utils.toWei("0", "wei"), {
+          from: accounts[0],
+        }),
+        "Should insert a positive amount"
+      )
+    })
+    it("should read the total amount of previous bet", async () => {
+      const result = await contest.getTotalAmountTokenDay.call(0, 0)
+      assert.equal(result.toNumber(), web3.utils.toWei("1000", "wei"))
+    })
+    it("should be able to place a second bet", async () => {
+      await contest.placeBet(1, web3.utils.toWei("1000", "wei"), {
+        from: accounts[0],
+      })
+    })
+    xit("should read the total amount of the day", async () => {
+      const result = await contest.getDayInfo.call(0)
+      assert.equal(result[0], web3.utils.toWei("2000", "wei"))
+    })
+    it("should read my total bets of the day", async () => {
+      const result = await contest.getMyBetsDay.call(0)
+      assert.equal(result[0], web3.utils.toWei("1000", "wei"))
+      assert.equal(result[1], web3.utils.toWei("1000", "wei"))
+      assert.equal(result[6], web3.utils.toWei("0", "wei"))
+    })
+    it("should be able to place a third bet from another address", async () => {
+      await contest.placeBet(6, web3.utils.toWei("1000", "wei"), {
+        from: accounts[1],
+      })
+    })
+    it("should read bets from another address", async () => {
+      const result = await contest.getMyBetsDay.call(0, {from: accounts[1]})
+      assert.equal(result[0], web3.utils.toWei("0", "wei"))
+      assert.equal(result[1], web3.utils.toWei("0", "wei"))
+      assert.equal(result[6], web3.utils.toWei("1000", "wei"))
+    })
     //   it("should get day state WAIT because (for yesterday and we have bets)", async () => {
-    //     const tx = contest.setTimestamp(now1, {
+    //     await contest.setTimestamp(now1, {
     //       from: accounts[1],
     //     })
-    //     waitForHash(tx)
     //     const result = await contest.getDayState.call(0)
     //     assert.equal(result.toNumber(), DayState.WAIT)
     //   })
     //   it("should be able to place a bet in the second day", async () => {
-    //     const tx = contest.placeBet(6, {
+    //     await  contest.placeBet(6, web3.utils.toWei("1000", "wei"), {
     //       from: accounts[1],
-    //       value: web3.utils.toWei("1000", "wei"),
     //     })
-    //     waitForHash(tx)
     //   })
     //   it("should be able to place a second bet in the second day", async () => {
-    //     const tx = contest.placeBet(3, {
+    //     await contest.placeBet(3, web3.utils.toWei("1000", "wei"), {
     //       from: accounts[2],
-    //       value: web3.utils.toWei("1000", "wei"),
     //     })
-    //     waitForHash(tx)
     //   })
     //   it("should revert due to bet are not in RESOLVE state", async () => {
     //     await truffleAssert.reverts(
@@ -222,18 +241,16 @@ contract("BetTestHelper", (accounts) => {
     //     )
     //   })
     //   it("should get day state RESOLVE because (for 2 days ago with bets)", async () => {
-    //     const tx = contest.setTimestamp(now2, {
+    //     await contest.setTimestamp(now2, {
     //       from: accounts[1],
     //     })
-    //     waitForHash(tx)
     //     const result = await contest.getDayState.call(0)
     //     assert.equal(result.toNumber(), DayState.RESOLVE)
     //   })
     //   it("should revert due to have not enough value to resolve the data request", async () => {
-    //     const tx = contest.setTimestamp(now2, {
+    //     await contest.setTimestamp(now2, {
     //       from: accounts[1],
     //     })
-    //     waitForHash(tx)
     //     await truffleAssert.reverts(
     //       contest.resolve(0, {
     //         from: accounts[0],
@@ -251,15 +268,13 @@ contract("BetTestHelper", (accounts) => {
     //     )
     //   })
     //   it("should get day state WAIT_RESULT after calling resolve)", async () => {
-    //     const tx = contest.setTimestamp(now2, {
+    //     await contest.setTimestamp(now2, {
     //       from: accounts[1],
     //     })
-    //     waitForHash(tx)
-    //     const resolveTx = contest.resolve(0, {
+    //     await = contest.resolve(0, {
     //       from: accounts[1],
     //       value: 2,
     //     })
-    //     waitForHash(resolveTx)
     //     const result = await contest.getDayState.call(0, {
     //       from: accounts[1],
     //     })
@@ -303,15 +318,13 @@ contract("BetTestHelper", (accounts) => {
     //     )
     //   })
     //   it("should get day state WAIT_RESULT after calling resolve the second day", async () => {
-    //     const tx = contest.setTimestamp(now3, {
+    //     await contest.setTimestamp(now3, {
     //       from: accounts[1],
     //     })
-    //     waitForHash(tx)
-    //     const resolveTx = contest.resolve(1, {
+    //     await contest.resolve(1, {
     //       from: accounts[1],
     //       value: 2,
     //     })
-    //     waitForHash(resolveTx)
     //     const result = await contest.getDayState.call(1, {
     //       from: accounts[1],
     //     })
