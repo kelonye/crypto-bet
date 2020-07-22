@@ -1,5 +1,5 @@
 pragma solidity >=0.6.0 <0.7.0;
-pragma experimental ABIEncoderV2;
+// pragma experimental ABIEncoderV2;
 
 import "@chainlink/contracts/src/v0.6/interfaces/AggregatorInterface.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -119,7 +119,7 @@ contract Bet {
         );
 
         // Result not okay, payout participations
-        if (!getDayResultIsReady(_day)) {
+        if (!getDayHasResults(_day)) {
             uint16 offset = u8Concat(_day, 0);
             for (uint16 i = 0; i < chainlinkTokenRefs.length; i++) {
                 if (
@@ -285,7 +285,7 @@ contract Bet {
     function getMyDayWins(uint8 _day) public view returns (uint256) {
         uint256 amount;
         // Data request is not yet resolved or is still beeing resolved within Witnet
-        if (!getDayResultIsReady(_day)) {
+        if (!getDayHasResults(_day)) {
             return amount;
         }
 
@@ -329,9 +329,9 @@ contract Bet {
     /// @dev Reads day information
     /// @param _day contest day
     /// @return day info structure
-    // function getDayInfo(uint8 _day) public view returns (DayInfo memory) {
-    //     return dayInfos[_day];
-    // }
+    function getDayGrandPrize(uint8 _day) public view returns (uint256) {
+        return dayInfos[_day].grandPrize;
+    }
 
     /// @dev Read last block timestamp and calculate difference with firstDay timestamp
     /// @return index of current day
@@ -342,7 +342,7 @@ contract Bet {
         return uint8(daysDiff);
     }
 
-    function getDayResultIsReady(uint8 _day) private view returns (bool) {
+    function getDayHasResults(uint8 _day) private view returns (bool) {
         uint16 betId = u8Concat(_day, 0);
         return bets[betId].endPrice != 0;
     }

@@ -64,7 +64,7 @@ contract Dai is Context, IERC20 {
         _name = name;
         _symbol = symbol;
         _decimals = 18;
-        _mint(msg.sender, 10000000);
+        _mint(msg.sender, 15000000);
     }
 
     /**
