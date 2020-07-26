@@ -1,5 +1,5 @@
 <script>
-  import {onMount, afterUpdate, onDestroy} from 'svelte';
+  import { onMount, afterUpdate, onDestroy } from 'svelte';
   import Chart from 'chart.js';
 
   const color = '#777';
@@ -21,13 +21,15 @@
       type,
       data: {
         labels: xLabel,
-        datasets: [{
-          label: yLabel,
-          data: y,
-          backgroundColor: color,
-          borderColor: color,
-          fill: false,
-        }]
+        datasets: [
+          {
+            label: yLabel,
+            data: y,
+            backgroundColor: color,
+            borderColor: color,
+            fill: false,
+          },
+        ],
       },
       options: {
         maintainAspectRatio: false,
@@ -35,13 +37,15 @@
           display: false,
           onClick: function (e) {
             e.stopPropagation();
-          }
+          },
         },
         scales: {
-          xAxes: [{gridLines: { }, ticks: {fontColor: color}}],
-          yAxes: [{gridLines: { }, ticks: {fontColor: color}}]
-        }
-      }
+          xAxes: [{ gridLines: {}, ticks: { fontColor: color } }],
+          yAxes: [
+            { gridLines: {}, ticks: { fontColor: color, beginAtZero: true } },
+          ],
+        },
+      },
     });
     chart.canvas.parentNode.style.height = '400px';
   });
@@ -59,4 +63,4 @@
   });
 </script>
 
-<canvas bind:this={chartRef}></canvas>
+<canvas bind:this={chartRef} />

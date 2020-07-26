@@ -21,12 +21,19 @@ contract BetTesthelper is Bet {
         return timestamp;
     }
 
-    function getLatestTokenPrice(uint256 tokenId)
+    function getLatestTokenPrice(uint256 _tokenId)
         public
         override
         returns (int256)
     {
-        return int256(tokenId) + price;
+        uint8 betDay = getCurrentDay();
+        uint16 betId = u8Concat(betDay, uint8(_tokenId));
+        TokenDay memory bet = bets[betId];
+        if (bet.startPrice != 0) {
+            return price;
+        } else {
+            return int256(_tokenId) + price;
+        }
     }
 
     function setLatestTokenPrice(int256 _price) public {

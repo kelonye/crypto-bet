@@ -1,6 +1,6 @@
 // import NProgress from 'nprogress';
 import { writable, get } from 'svelte/store';
-import { sleep, Contract } from '../utils';
+import { sleep, Contract, sl } from '../utils';
 import BET_CONTRACT_JSON from '../data/contracts/Bet.json';
 import DAI_CONTRACT_JSON from '../data/dai';
 
@@ -14,8 +14,8 @@ export const balance = writable('0');
 export const networkInfo = writable({});
 
 export async function load() {
-  let networkId = 1;
-  let networkName = 'main';
+  let networkId = 4;
+  let networkName = 'rinkeby';
 
   if (window.WEB3_WRITES_ENABLED) {
     networkId = await window.WEB3.eth.net.getId();
@@ -27,10 +27,15 @@ export async function load() {
   networkInfo.set({ networkId, networkName, networkSupported });
 
   if (networkSupported) {
-    betContract.setNetworkId(networkId);
-    betContract.setContract(BET_CONTRACT_JSON);
+    address.subscribe(($address) => {
+      betContract.setAccount($address);
+      daiContract.setAccount($address);
+    });
 
+    betContract.setNetworkId(networkId);
     daiContract.setNetworkId(networkId);
+
+    betContract.setContract(BET_CONTRACT_JSON);
     daiContract.setContract(DAI_CONTRACT_JSON);
 
     await Promise.all([loadInfo(), loadAccount()]);
@@ -38,6 +43,9 @@ export async function load() {
 }
 
 export async function connectAccount() {
+  if (!window.ethereum) {
+    return sl('error', 'Please install Metamask browser extension.');
+  }
   await window.ethereum.enable();
   await loadAccount();
 }
@@ -61,18 +69,6 @@ export async function loadAccount() {
 
 export async function loadBalance() {
   balance.set(await daiContract.read('balanceOf', [get(address)]));
-}
-
-export async function tryReloadBalance() {
-  let b = get(balance);
-  for (let i = 0; i < 3; i++) {
-    if (b !== get(balance)) {
-      break;
-    }
-    b = get(balance);
-    await sleep(2000);
-    await loadBalance();
-  }
 }
 
 async function loadMyInfo() {}

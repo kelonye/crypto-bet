@@ -1,6 +1,7 @@
 <script>
   import moment from 'moment';
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import Day from '../components/day.svelte';
   import {
     address,
@@ -9,15 +10,17 @@
     balance,
     load,
     loadBalance,
-    tryReloadBalance,
     disconnectAccount,
     connectAccount,
+    betContract,
+    networkInfo,
   } from '../stores/blockchain';
   import { fromDaiWei, toDaiWei, sl, sleep } from '../utils';
+  import { hostname } from 'os';
 
-  const tomorrow = moment.utc().add(1, 'days');
-  const today = moment.utc();
-  const yesterday = moment.utc().subtract(1, 'days');
+  const tomorrow = moment.utc();
+  const today = moment.utc().subtract(1, 'days');
+  const yesterday = moment.utc().subtract(2, 'days');
   const days = [
     { label: 'Tomorrow', date: tomorrow },
     { label: 'Today', date: today },
@@ -25,10 +28,23 @@
   ];
   let loaded = false;
 
-  onMount(async function() {
+  onMount(async function () {
     await load();
     loaded = true;
+    // console.log(
+    //   await betContract.read('getLatestTokenPrice', [0], {
+    //     from: get(address),
+    //   })
+    // );
   });
+
+  async function recordPrice() {
+    console.log(
+      await betContract.write('saveCurrentDayRankingFromChainlink', [], {
+        from: get(address),
+      })
+    );
+  }
 </script>
 
 <style>
@@ -53,6 +69,10 @@
     position: absolute;
     top: 0;
     width: 1px;
+  }
+
+  .error {
+    color: red;
   }
 </style>
 
@@ -91,6 +111,11 @@
         <button class="button is-light is-small ml-2" on:click={loadBalance}>
           REFRESH BALANCE
         </button>
+        {#if 'localhost' === window.location.hostname}
+          <button class="button is-light is-small ml-2" on:click={recordPrice}>
+            RECORD
+          </button>
+        {/if}
         <!--
           <button
           class="button is-light is-small ml-2"
@@ -100,12 +125,16 @@
         -->
       {:else}
         <button class="button is-light is-small" on:click={connectAccount}>
-          CONNECT ACCOUNT
+          CONNECT TO METAMASK
         </button>
       {/if}
     </div>
 
-    {#if info}
+    {#if !$networkInfo.networkSupported}
+      <div class="flex flex-grow justify-center mt-10 error">
+        Unsupported network ({$networkInfo.networkName}). Please use Rinkeby.
+      </div>
+    {:else if info}
       <div class="main-container">
         {#each days as day}
           {#if $info}

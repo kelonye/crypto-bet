@@ -4,7 +4,7 @@ import 'sweetalert/dist/sweetalert.css';
 
 const noop = () => {};
 
-export function sl(type, msg, title, done = noop, moreOpts = {}) {
+export function sl(type, msg, title, moreOpts = {}) {
   if ('error' === type) {
     msg = msg.responseText || msg.message || msg;
   }
@@ -29,5 +29,5 @@ export function sl(type, msg, title, done = noop, moreOpts = {}) {
     error: '#DD6B55',
   }[type];
 
-  SL(opts, done);
+  return new Promise((resolve) => SL(opts, resolve));
 }

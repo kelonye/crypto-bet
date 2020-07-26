@@ -5,12 +5,22 @@
   import moment from 'moment';
   import Chart from '../components/chart.svelte';
   import Clock from '../components/clock.svelte';
-  import { fromDaiWei, toDaiWei, formatFiat, sleep, sl } from '../utils';
+  import Loader from '../components/loader.svelte';
+  import {
+    fromDaiWei,
+    toDaiWei,
+    formatFiat,
+    sleep,
+    sl,
+    bn,
+    waitForTxn,
+  } from '../utils';
   import {
     address,
     info,
-    tryReloadBalance,
+    loadBalance,
     betContract,
+    daiContract,
   } from '../stores/blockchain';
   import { COINS, DAY_STATES } from '../config';
 
@@ -29,8 +39,8 @@
   let isDrawing;
   let isPayout;
 
-  let isBetting;
-  let isWithdrawingWins;
+  let isBetting = false;
+  let isWithdrawingWins = false;
 
   address.subscribe(() => {
     Promise.all([loadDayInfo(), loadMyDayInfo()]);
@@ -46,11 +56,11 @@
         return {
           id,
           perf,
-          amount: !myDayInfo ? 0 : parseInt(myDayInfo.coinBetTotalAmount[id]),
+          amount: !myDayInfo ? '0' : myDayInfo.coinBetTotalAmount[id],
         };
       });
 
-      chartY = dayInfo.coinsVolume.map(v => fromDaiWei(v));
+      chartY = dayInfo.coinsVolume.map((v) => parseFloat(fromDaiWei(v)));
     } else {
       coinStats = COINS.map((c, id) => ({
         id,
@@ -60,66 +70,95 @@
     }
   }
 
-  // onMount(async function() {
-  //   called by address subscription above
-  //   await Promise.all([loadDayInfo(), loadMyDayInfo()]);
-  // });
-
   async function loadDayInfo() {
-    console.log(dayId);
-    // console.log(await betContract.read('getDayRankingFromChainlink', [dayId]));
-    // const info = await blockchain.query(`/coinpricebet/day-info/${dayId}`);
-    // info.grandPrizeAmount = parseInt(info.grandPrizeAmount);
-    // info.currencyPriceUSD = Math.pow(10, 6); // parseInt(info.currencyPriceUSD);
-    // info.coinsPerf = info.coinsPerf.map(n => parseInt(n));
-    // info.coinsVolume = info.coinsVolume.map(n => parseInt(n));
-    // info.state = parseInt(info.state);
-    // dayInfo = info;
-    // canBet = dayInfo.state === DAY_STATES.DAI;
-    // isDrawing = dayInfo.state === DAY_STATES.DRAWING;
-    // isPayout = dayInfo.state === DAY_STATES.PAYOUT;
+    let [
+      grandPrizeAmount,
+      { 0: coinsPerf, 1: ranking },
+      state,
+      prices,
+      ...coinsVolume
+    ] = await Promise.all([
+      betContract.read('getDayGrandPrize', [dayId]),
+      betContract.read('getDayRankingFromChainlink', [dayId]),
+      betContract.read('getDayState', [dayId]),
+      betContract.read('getDayTokenPrices', [dayId, '2']),
+      ...COINS.map((_, tokenId) =>
+        betContract.read('getTotalAmountTokenDay', [
+          dayId.toString(),
+          tokenId.toString(),
+        ])
+      ),
+    ]);
+
+    coinsPerf = coinsPerf.length
+      ? coinsPerf.map((p) => bn(p).div(bn(10000)))
+      : COINS.map(() => bn('0'));
+
+    dayInfo = {
+      grandPrizeAmount,
+      coinsPerf,
+      coinsVolume,
+      state: parseInt(state),
+    };
+    console.log(dayId, prices, '-', ...coinsPerf.map((n) => n.toNumber()));
+    canBet = dayInfo.state === DAY_STATES.BET;
+    isDrawing = dayInfo.state === DAY_STATES.DRAWING;
+    isPayout = dayInfo.state === DAY_STATES.PAYOUT;
   }
 
   async function loadMyDayInfo() {
-    // const $address = get(address);
-    // if ($address) {
-    //   const info = await blockchain.query(
-    //     `/coinpricebet/day-info/${dayId}/${$address}`
-    //   );
-    //   info.totalBetAmount = parseInt(info.totalBetAmount);
-    //   info.coinBetTotalAmount = info.coinBetTotalAmount.map(n => parseInt(n));
-    //   myDayInfo = info;
-    // }
+    if (get(address)) {
+      const [coinBetTotalAmount, totalWinAmount, paid] = await Promise.all([
+        betContract.read('getMyBetsDay', [dayId]),
+        betContract.read('getMyDayWins', [dayId]),
+        betContract.read('getMyDayPaid', [dayId]),
+      ]);
+      myDayInfo = {
+        totalBetAmount: coinBetTotalAmount.reduce(
+          (a, b) => a.add(bn(b)),
+          bn('0')
+        ),
+        totalWinAmount,
+        coinBetTotalAmount,
+        paid,
+      };
+    }
   }
 
   async function onSendPrediction(event) {
     event.preventDefault();
 
-    isBetting = false;
-
     const coin = event.target.coin.value;
     const amount = event.target.amount.value;
-    const $info = get(info);
+    const from = get(address);
+    const amountWei = toDaiWei(amount);
+
+    await sl(
+      'info',
+      `Supporting ${coin} win prediction with ${amount}DAI`,
+      'Place bet?'
+    );
+
+    isBetting = true;
 
     try {
-      sl(
-        'info',
-        `Supporting ${coin} win prediction with ${amount}DAI`,
-        'Place bet?',
-        async () => {
-          // await blockchain.tx('post', '/coinpricebet/place-bet', {
-          //   amount: `${toDaiWei(amount).toString()}stake`,
-          //   coinId: COINS.indexOf(coin),
-          // });
-          sl('success', 'Waiting for confirmation...');
-          await sleep(3000);
-          await Promise.all([
-            loadDayInfo(),
-            loadMyDayInfo(),
-            tryReloadBalance(),
-          ]);
-        }
-      );
+      if (
+        bn(
+          await daiContract.read('allowance', [from, betContract.address])
+        ).lte(bn(amountWei))
+      ) {
+        await waitForTxn(
+          await daiContract.write('approve', [betContract.address, amountWei])
+        );
+      }
+      const txHash = await betContract.write('placeBet', [
+        COINS.indexOf(coin).toString(),
+        amountWei,
+      ]);
+      sl('success', 'Waiting for confirmation...');
+      await waitForTxn(txHash);
+      await sleep(5000);
+      await Promise.all([loadDayInfo(), loadMyDayInfo(), loadBalance()]);
     } catch (e) {
       sl('error', e);
     } finally {
@@ -130,12 +169,10 @@
   async function onWithdrawWins(event) {
     isWithdrawingWins = true;
     try {
-      // await blockchain.tx('post', '/coinpricebet/payout', {
-      //   dayId: dayId.toString(),
-      // });
+      betContract.read('getTotalAmountTokenDay', [dayId]);
       sl('success', 'Done!');
       await sleep(3000);
-      await Promise.all([loadDayInfo(), loadMyDayInfo(), tryReloadBalance()]);
+      await Promise.all([loadDayInfo(), loadMyDayInfo(), loadBalance()]);
     } finally {
       isWithdrawingWins = false;
     }
@@ -324,6 +361,10 @@
   .table {
     width: 100%;
   }
+
+  .select {
+    display: flex !important;
+  }
 </style>
 
 <div class="day-container flex dark">
@@ -376,7 +417,7 @@
               </div>
               <ul class="fiat">
                 <li>
-                  ~{formatFiat(fromDaiWei(dayInfo.grandPrizeAmount) * fromDaiWei(dayInfo.currencyPriceUSD), 'USD')}
+                  ~{formatFiat(fromDaiWei(dayInfo.grandPrizeAmount), 'USD')}
                   <span class="currency">USD</span>
                 </li>
               </ul>
@@ -455,7 +496,7 @@
                     will be:
                   </label>
                   <div class="select">
-                    <select id="bet-select" name="coin">
+                    <select id="bet-select" name="coin" class="flex flex-grow">
                       {#each COINS as coin}
                         <option value={coin}>{coin}</option>
                       {/each}
@@ -466,24 +507,30 @@
                     <label for="bet-input">
                       I'm supporting my prediction with this amount of DAI:
                     </label>
-                    <br />
-                    <input
-                      required="required"
-                      class="input"
-                      type="text"
-                      id="bet-input"
-                      name="amount"
-                      placeholder="Enter amount of DAI..." />
                   </div>
 
-                  <div class="flex flex-grow mt-3">
-                    <button
-                      type="submit"
-                      class="button is-link flex-grow"
-                      disabled={isBetting || !$address}>
-                      Send prediction
-                    </button>
-                  </div>
+                  {#if isBetting}
+                    <Loader />
+                  {:else}
+                    <div class="flex flex-grow">
+                      <input
+                        required="required"
+                        class="input flex-grow"
+                        type="text"
+                        id="bet-input"
+                        name="amount"
+                        placeholder="Enter amount of DAI..." />
+                    </div>
+
+                    <div class="flex flex-grow mt-3">
+                      <button
+                        type="submit"
+                        class="button is-link flex-grow"
+                        disabled={!$address}>
+                        Send prediction
+                      </button>
+                    </div>
+                  {/if}
                 </form>
               </div>
             </div>
@@ -509,7 +556,7 @@
               <button
                 type="submit"
                 class="button is-link flex-grow"
-                disabled={isWithdrawingWins || myDayInfo.paid || !myDayInfo.totalWinAmount}
+                disabled={isWithdrawingWins || myDayInfo.paid || !myDayInfo.totalWinAmount || !myDayInfo.totalBetAmount || !dayInfo.grandPrizeAmount}
                 on:click={onWithdrawWins}>
                 Withdraw Wins
               </button>

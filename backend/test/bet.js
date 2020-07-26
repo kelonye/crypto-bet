@@ -82,12 +82,12 @@ contract("BetTestHelper", (accounts) => {
       const result = await contest.getDayState.call(0)
       assert.equal(result.toNumber(), DayState.BET)
     })
-    it("should get day state PAYOUT because (for yesterday and no bets)", async () => {
+    it("should get day state DRAWING because (for yesterday and no bets)", async () => {
       await contest.setTimestamp(now1, {
         from: accounts[1],
       })
       const result = await contest.getDayState.call(0)
-      assert.equal(result.toNumber(), DayState.PAYOUT)
+      assert.equal(result.toNumber(), DayState.DRAWING)
     })
     it("should get day state INVALID because is for tomorrow", async () => {
       await contest.setTimestamp(now0, {
@@ -106,14 +106,14 @@ contract("BetTestHelper", (accounts) => {
       let result = await contest.getDayRankingFromChainlink.call(0)
       assert.equal(result["0"].length, 0)
       //
-      await contest.setLatestTokenPrice(1, {
+      await contest.setLatestTokenPrice(10000, {
         from: accounts[1],
       })
       await contest.saveCurrentDayRankingFromChainlink({
         from: accounts[1],
       })
       //
-      await contest.setLatestTokenPrice(3, {
+      await contest.setLatestTokenPrice(10002, {
         from: accounts[1],
       })
       await contest.saveCurrentDayRankingFromChainlink({
@@ -121,9 +121,14 @@ contract("BetTestHelper", (accounts) => {
       })
       //
       result = await contest.getDayRankingFromChainlink.call(0)
-      assert.equal(result["0"][0].toNumber(), 200)
+      assert.equal(result["0"][0].toNumber(), 0.0002 * 1000000)
       assert.equal(result["1"][0].toNumber(), 0)
       assert.equal(result["1"][1].toNumber(), 1)
+      assert.equal(result["1"][2].toNumber(), 2)
+      //
+      const {0: start, 1: end} = await contest.getDayTokenPrices.call(0, 0)
+      assert.equal(start.toNumber(), 10000)
+      assert.equal(end.toNumber(), 10002)
     })
   })
 
@@ -281,15 +286,15 @@ contract("BetTestHelper", (accounts) => {
     //     assert.equal(result.toNumber(), DayState.WAIT_RESULT)
     //   })
 
-    it("should call payout with succesful result and refund winnet", async () => {
+    it("should call payout with successful result", async () => {
+      const from = accounts[0]
       let balanceBefore = await dai.balanceOf(contest.address)
-
-      await contest.payout(0, {
-        from: accounts[0],
-      })
-
+      assert.equal(await contest.getMyDayWins.call(0, {from}), 3000)
+      assert.equal(await contest.getMyDayPaid.call(0, {from}), false)
+      await contest.payout(0, {from})
       let balanceAfter = await dai.balanceOf(contest.address)
       assert.equal(parseInt(balanceAfter), parseInt(balanceBefore) - 3000)
+      assert.equal(await contest.getMyDayPaid.call(0, {from}), true)
     })
     it("should revert because contestant already paid", async () => {
       await truffleAssert.reverts(
@@ -319,10 +324,7 @@ contract("BetTestHelper", (accounts) => {
 
     it("should refund if no results were recorded", async () => {
       const balanceBefore = await dai.balanceOf(contest.address)
-      await contest.payout(1, {
-        from: accounts[1],
-      })
-
+      await contest.payout(1, {from: accounts[1]})
       const balanceAfter = await dai.balanceOf(contest.address)
       assert.equal(parseInt(balanceAfter), parseInt(balanceBefore) - 1000)
     })
