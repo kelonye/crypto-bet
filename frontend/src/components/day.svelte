@@ -65,34 +65,41 @@
       coinStats = COINS.map((c, id) => ({
         id,
         perf: 0,
-        amount: 0,
+        amount: '0',
       }));
     }
+    console.log(coinStats);
   }
 
   async function loadDayInfo() {
-    let [
-      grandPrizeAmount,
-      { 0: coinsPerf, 1: ranking },
-      state,
-      prices,
-      ...coinsVolume
-    ] = await Promise.all([
+    let [grandPrizeAmount, state, prices, coinsVolume] = await Promise.all([
       betContract.read('getDayGrandPrize', [dayId]),
-      betContract.read('getDayRankingFromChainlink', [dayId]),
       betContract.read('getDayState', [dayId]),
-      betContract.read('getDayTokenPrices', [dayId, '2']),
-      ...COINS.map((_, tokenId) =>
-        betContract.read('getTotalAmountTokenDay', [
-          dayId.toString(),
-          tokenId.toString(),
-        ])
+      Promise.all(
+        COINS.map((_, tokenId) =>
+          betContract.read('getDayTokenPrices', [
+            dayId.toString(),
+            tokenId.toString(),
+          ])
+        )
+      ),
+      Promise.all(
+        COINS.map((_, tokenId) =>
+          betContract.read('getTotalAmountTokenDay', [
+            dayId.toString(),
+            tokenId.toString(),
+          ])
+        )
       ),
     ]);
-
-    coinsPerf = coinsPerf.length
-      ? coinsPerf.map((p) => bn(p).div(bn(10000)))
-      : COINS.map(() => bn('0'));
+    const coinsPerf = prices.length
+      ? prices.map(({ 0: _start, 1: _end }) => {
+          const start = bn(_start);
+          const end = bn(_end);
+          if (end.isZero()) return 0;
+          return end.sub(start).mul(bn('10000')).div(end).toNumber() / 100;
+        })
+      : COINS.map(() => 0);
 
     dayInfo = {
       grandPrizeAmount,
@@ -100,7 +107,7 @@
       coinsVolume,
       state: parseInt(state),
     };
-    console.log(dayId, prices, '-', ...coinsPerf.map((n) => n.toNumber()));
+
     canBet = dayInfo.state === DAY_STATES.BET;
     isDrawing = dayInfo.state === DAY_STATES.DRAWING;
     isPayout = dayInfo.state === DAY_STATES.PAYOUT;
@@ -469,7 +476,7 @@
                           <td>{COINS[stat.id]}</td>
                           {#if !canBet}
                             <td class="text-xs ml-3">
-                              {(fromDaiWei(stat.perf) * 100).toFixed(2)}%
+                              {stat.perf.toFixed(2)}%
                             </td>
                           {/if}
                           <td align="right">

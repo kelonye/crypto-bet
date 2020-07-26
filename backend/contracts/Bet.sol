@@ -162,31 +162,16 @@ contract Bet {
         return block.timestamp;
     }
 
-    /// @dev Gets ranking from Witnet Bridge Interface in case that results are still not written into the contract
-    /// @param _day contest day of the payout
-    function getDayRankingFromChainlink(uint8 _day)
-        public
-        view
-        returns (int256[] memory, uint8[] memory)
-    {
-        // int256[] memory requestResult = new int256[](chainlinkTokenRefs.length);
-        // for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
-        //     uint16 betId = u8Concat(_day, i);
-        //     TokenDay memory bet = bets[betId];
-        //     int256 perf = 0;
-        //     if (bet.startPrice != 0 && bet.endPrice != 0) {
-        //         perf = (bet.endPrice.sub(bet.startPrice))
-        //             .div(bet.startPrice)
-        //             .mul(100);
-        //     }
-        //     requestResult[i] = perf;
-        // }
-        // return (requestResult, rank(requestResult));
-        return (dayInfos[_day].perfs, dayInfos[_day].ranking);
+    function getDayRanking(uint8 _day) public view returns (uint8[] memory) {
+        return dayInfos[_day].ranking;
+    }
+
+    function getDayPerfs(uint8 _day) public view returns (int256[] memory) {
+        return dayInfos[_day].perfs;
     }
 
     function saveCurrentDayRankingFromChainlink() public {
-        uint8 betDay = getCurrentDay();
+        uint8 betDay = getCurrentDay() - 1;
         for (uint8 i = 0; i < chainlinkTokenRefs.length; i++) {
             uint16 betId = u8Concat(betDay, i);
             int256 latest = getLatestTokenPrice(i);

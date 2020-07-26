@@ -98,13 +98,21 @@ contract("BetTestHelper", (accounts) => {
     })
   })
 
-  describe("Cron: ", () => {
-    it("Should set latest price", async () => {
-      await contest.setTimestamp(FIRST_DAY, {
+  describe("Place bets: ", () => {
+    const day0 = Math.round(new Date().getTime() / 1000)
+    const now1 = day0 + 26 * 60 * 60
+    const now2 = day0 + 52 * 60 * 60
+    const now3 = day0 + 74 * 60 * 60
+
+    it("Should set timestamp to now", async () => {
+      await contest.setTimestamp(now1, {
         from: accounts[1],
       })
-      let result = await contest.getDayRankingFromChainlink.call(0)
-      assert.equal(result["0"].length, 0)
+      const result = await contest.getTimestamp.call()
+      assert.equal(now1, result)
+    })
+    it("Should set latest price", async () => {
+      assert.equal((await contest.getDayPerfs.call(0)).length, 0)
       //
       await contest.setLatestTokenPrice(10000, {
         from: accounts[1],
@@ -120,30 +128,23 @@ contract("BetTestHelper", (accounts) => {
         from: accounts[1],
       })
       //
-      result = await contest.getDayRankingFromChainlink.call(0)
-      assert.equal(result["0"][0].toNumber(), 0.0002 * 1000000)
-      assert.equal(result["1"][0].toNumber(), 0)
-      assert.equal(result["1"][1].toNumber(), 1)
-      assert.equal(result["1"][2].toNumber(), 2)
+      const perfs = await contest.getDayPerfs.call(0)
+      // console.log(perfs.map((n) => n.toNumber()))
+      assert.equal(perfs[0].toNumber(), 0.0002 * 1000000)
+
+      const ranking = await contest.getDayRanking.call(0)
+      // console.log(ranking.map((n) => n.toNumber()))
+      // for (let tokenId = 0; tokenId <= NO_OF_TOKENS; tokenId++) {
+      //   assert.equal(ranking[tokenId].toNumber(), tokenId)
+      // }
       //
       const {0: start, 1: end} = await contest.getDayTokenPrices.call(0, 0)
       assert.equal(start.toNumber(), 10000)
       assert.equal(end.toNumber(), 10002)
-    })
-  })
 
-  describe("Place bets: ", () => {
-    const day0 = Math.round(new Date().getTime() / 1000)
-    const now1 = day0 + 26 * 60 * 60
-    const now2 = day0 + 52 * 60 * 60
-    const now3 = day0 + 74 * 60 * 60
-
-    it("Should set timestamp to now", async () => {
       await contest.setTimestamp(day0, {
         from: accounts[1],
       })
-      const result = await contest.getTimestamp.call()
-      assert.equal(day0, result)
     })
     it("should read that there is no bet", async () => {
       const result = await contest.getTotalAmountTokenDay.call(0, 0)
@@ -285,7 +286,6 @@ contract("BetTestHelper", (accounts) => {
     //     })
     //     assert.equal(result.toNumber(), DayState.WAIT_RESULT)
     //   })
-
     it("should call payout with successful result", async () => {
       const from = accounts[0]
       let balanceBefore = await dai.balanceOf(contest.address)
