@@ -23,7 +23,7 @@ const tokens = {
 module.exports = async function (deployer, network, [defaultAccount]) {
   network = network.split("-")[0]
 
-  const firstDay = moment("2020-07-01").unix()
+  const firstDay = moment.utc("2020-07-01").unix()
   const day = 60 * 60 * 24
 
   let daiAddress = dai[network]

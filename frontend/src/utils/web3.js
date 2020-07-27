@@ -49,7 +49,11 @@ export class Contract {
           if (err) {
             return reject(new Error(err.message));
           }
-          resolve(response.c?.[0] ?? response);
+          if (response.c && response.c.length) {
+            return resolve(response.c);
+          }
+          resolve(response);
+          // resolve(response.c?.[0] ?? response);
         }
       );
     });
