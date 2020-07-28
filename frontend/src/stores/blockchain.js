@@ -64,7 +64,7 @@ export async function loadAccount() {
   const addr = (await window.WEB3.eth.getAccounts())[0];
   address.set(addr);
 
-  Promise.all([loadBalance(), loadMyInfo()]);
+  if (addr) Promise.all([loadBalance(), loadMyInfo()]);
 }
 
 export async function loadBalance() {
