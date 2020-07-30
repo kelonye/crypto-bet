@@ -9,6 +9,7 @@
     justify-content: center;
     flex: 1;
     height: 100%;
+    margin-top: -30px;
   }
 
   .throbber {

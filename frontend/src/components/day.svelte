@@ -56,7 +56,7 @@
         return {
           id,
           perf,
-          amount: !myDayInfo ? '0' : myDayInfo.coinBetTotalAmount[id],
+          amount: bn(!myDayInfo ? '0' : myDayInfo.coinBetTotalAmount[id]),
         };
       });
 
@@ -68,7 +68,6 @@
         amount: '0',
       }));
     }
-    console.log(coinStats);
   }
 
   async function loadDayInfo() {
@@ -102,7 +101,7 @@
       : COINS.map(() => 0);
 
     dayInfo = {
-      grandPrizeAmount,
+      grandPrizeAmount: bn(grandPrizeAmount),
       coinsPerf,
       coinsVolume,
       state: parseInt(state),
@@ -125,7 +124,7 @@
           (a, b) => a.add(bn(b)),
           bn('0')
         ),
-        totalWinAmount,
+        totalWinAmount: bn(totalWinAmount),
         coinBetTotalAmount,
         paid,
       };
@@ -176,7 +175,7 @@
   async function onWithdrawWins(event) {
     isWithdrawingWins = true;
     try {
-      betContract.read('getTotalAmountTokenDay', [dayId]);
+      await waitForTxn(await betContract.write('payout', [dayId]));
       sl('success', 'Done!');
       await sleep(3000);
       await Promise.all([loadDayInfo(), loadMyDayInfo(), loadBalance()]);
@@ -560,13 +559,17 @@
               Your total win amount: {fromDaiWei(myDayInfo.totalWinAmount)} DAI
             </div>
             <div class="flex flex-grow mt-3">
-              <button
-                type="submit"
-                class="button is-link flex-grow"
-                disabled={isWithdrawingWins || myDayInfo.paid || !myDayInfo.totalWinAmount || !myDayInfo.totalBetAmount || !dayInfo.grandPrizeAmount}
-                on:click={onWithdrawWins}>
-                Withdraw Wins
-              </button>
+              {#if isWithdrawingWins}
+                <Loader />
+              {:else}
+                <button
+                  type="submit"
+                  class="button is-link flex-grow"
+                  disabled={myDayInfo.paid || myDayInfo.totalWinAmount.isZero() || myDayInfo.totalBetAmount.isZero() || dayInfo.grandPrizeAmount.isZero()}
+                  on:click={onWithdrawWins}>
+                  Withdraw Wins
+                </button>
+              {/if}
             </div>
           {/if}
         </div>

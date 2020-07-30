@@ -21,6 +21,7 @@ export function toDaiWei(n) {
 }
 
 export function fromDaiWei(n) {
+  if (!n) return;
   return window.WEB3.utils.fromWei(n, 'ether');
 }
 
