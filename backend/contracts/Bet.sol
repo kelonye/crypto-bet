@@ -146,10 +146,16 @@ contract Bet {
                 "Address has no bets in the winning token"
             );
             // Prize calculation
+            uint256 prize = 0;
             uint256 grandPrize = dayInfos[_day].grandPrize;
-            uint256 winnerAmount = bets[dayTokenId].totalAmount;
-            uint256 prize = (bets[dayTokenId].participations[msg.sender] *
-                grandPrize) / winnerAmount;
+            if (bets[dayTokenId].participations.length == 0) {
+                prize = grandPrize;
+            } else {
+                uint256 winnerAmount = bets[dayTokenId].totalAmount;
+                prize =
+                    (bets[dayTokenId].participations[msg.sender] * grandPrize) /
+                    winnerAmount;
+            }
             // Set paid flag and Transfer
             bets[dayTokenId].paid[msg.sender] = true;
             dai.transfer(msg.sender, prize);
