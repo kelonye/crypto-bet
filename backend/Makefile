@@ -13,9 +13,17 @@ test:
 verify:
 	@./node_modules/.bin/truffle run verify
 
+ssh:
+	@ssh root@144.202.100.245
+
+cron:
+	@./node_modules/.bin/pm2 start bin/cron.js
+
 .PHONY: deploy \
 		deploy-test \
 		deploy-main \
 		test \
-		verify
+		verify \
+		ssh \
+		cron
 
