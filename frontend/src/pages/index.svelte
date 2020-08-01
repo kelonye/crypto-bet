@@ -1,6 +1,5 @@
 <script>
   import moment from 'moment';
-  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import Day from '../components/day.svelte';
   import {
@@ -28,14 +27,9 @@
   ];
   let loaded = false;
 
-  onMount(async function () {
+  address.subscribe(async () => {
     await load();
     loaded = true;
-    // console.log(
-    //   await betContract.read('getLatestTokenPrice', [0], {
-    //     from: get(address),
-    //   })
-    // );
   });
 
   async function recordPrice() {

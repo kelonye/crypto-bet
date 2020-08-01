@@ -26,6 +26,16 @@ export async function load() {
 
   networkInfo.set({ networkId, networkName, networkSupported });
 
+  if (window.ethereum) {
+    // window.ethereum.on('chainChanged', () => {
+    //   document.location.reload();
+    // });
+
+    window.ethereum.on('accountsChanged', function (accounts) {
+      address.set(accounts[0]);
+    });
+  }
+
   if (networkSupported) {
     address.subscribe(($address) => {
       betContract.setAccount($address);

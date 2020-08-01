@@ -516,7 +516,9 @@
                   </div>
 
                   {#if isBetting}
-                    <Loader />
+                    <div style="margin-top: -30px;">
+                      <Loader />
+                    </div>
                   {:else}
                     <div class="flex flex-grow">
                       <input
