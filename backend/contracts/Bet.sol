@@ -18,8 +18,10 @@ contract Bet {
     // DAI token ref
     IDai internal dai;
 
-    // Event emitted when a bet is placed by a contest participant
+    // Events
     event BetPlaced(uint8 day, uint8 tokenId, address sender, uint256 value);
+    event Payout(uint8 day, uint8 tokenId, address sender);
+    event PriceUpdate(uint8 day);
 
     // Timestamp (as seconds since unix epoch) from which the constest starts counting (to enable certain operations)
     uint256 public firstDay;
@@ -159,6 +161,7 @@ contract Bet {
             // Set paid flag and Transfer
             bets[dayTokenId].paid[msg.sender] = true;
             dai.transfer(msg.sender, prize);
+            emit Payout(betDay, _tokenId, msg.sender);
         }
     }
 
@@ -203,6 +206,8 @@ contract Bet {
 
         dayInfos[betDay].perfs = requestResult;
         dayInfos[betDay].ranking = rank(requestResult);
+
+        emit PriceUpdate(betDay);
     }
 
     function getLatestTokenPrice(uint256 tokenId)

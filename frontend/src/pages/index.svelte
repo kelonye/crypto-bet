@@ -1,6 +1,7 @@
 <script>
-  import moment from 'moment';
+  import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
+  import moment from 'moment';
   import Day from '../components/day.svelte';
   import {
     address,
@@ -14,8 +15,7 @@
     betContract,
     networkInfo,
   } from '../stores/blockchain';
-  import { fromDaiWei, toDaiWei, sl, sleep } from '../utils';
-  import { hostname } from 'os';
+  import { fromDaiWei, toDaiWei, sl, sleep, autoReload } from '../utils';
 
   const tomorrow = moment.utc();
   const today = moment.utc().subtract(1, 'days');
@@ -26,10 +26,28 @@
     { label: 'Yesterday', date: yesterday },
   ];
   let loaded = false;
+  let addressUnSubscriber;
+  let betPlacedUnSubscriber;
 
-  address.subscribe(async () => {
-    await load();
-    loaded = true;
+  onMount(() => {
+    addressUnSubscriber = address.subscribe(async () => {
+      await load();
+
+      if (!loaded) {
+        betPlacedUnSubscriber = betContract.on('BetPlaced', loadBalance)
+          .unsubscribe;
+      }
+
+      loaded = true;
+    });
+    autoReload(() => {
+      window.reload();
+    });
+  });
+
+  onDestroy(() => {
+    addressUnSubscriber();
+    betPlacedUnSubscriber && betPlacedUnSubscriber();
   });
 
   async function recordPrice() {

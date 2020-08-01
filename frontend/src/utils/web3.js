@@ -59,7 +59,7 @@ export class Contract {
     });
   }
 
-  async on(eventName, fn) {
-    this.contract.events[eventName]({}, fn);
+  on(eventName, fn) {
+    return this.contract.events[eventName]({}, fn);
   }
 }

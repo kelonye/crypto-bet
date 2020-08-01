@@ -5,6 +5,7 @@ export * from './sl';
 export * from './xhr';
 export * from './cache';
 export * from './web3';
+export * from './auto-reload';
 
 export function formatFiat(val, currency) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(

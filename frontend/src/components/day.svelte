@@ -1,6 +1,6 @@
 <script>
   import _ from 'lodash';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { get, derived } from 'svelte/store';
   import moment from 'moment';
   import Chart from '../components/chart.svelte';
@@ -42,9 +42,8 @@
   let isBetting = false;
   let isWithdrawingWins = false;
 
-  address.subscribe(() => {
-    Promise.all([loadDayInfo(), loadMyDayInfo()]);
-  });
+  let addressUnSubscriber;
+  let betPlacedUnSubscriber;
 
   $: {
     if (dayInfo) {
@@ -68,6 +67,21 @@
         amount: '0',
       }));
     }
+  }
+
+  onMount(() => {
+    addressUnSubscriber = address.subscribe(loadDayData);
+    betPlacedUnSubscriber = betContract.on('BetPlaced', loadDayData)
+      .unsubscribe;
+  });
+
+  onDestroy(() => {
+    addressUnSubscriber();
+    betPlacedUnSubscriber();
+  });
+
+  function loadDayData() {
+    Promise.all([loadDayInfo(), loadMyDayInfo()]);
   }
 
   async function loadDayInfo() {
@@ -139,6 +153,13 @@
     const from = get(address);
     const amountWei = toDaiWei(amount);
 
+    console.log(
+      from,
+      betContract.address,
+      await daiContract.read('allowance', [from, betContract.address]),
+      amountWei
+    );
+
     await sl(
       'info',
       `Supporting ${coin} win prediction with ${amount}DAI`,
@@ -154,7 +175,10 @@
         ).lte(bn(amountWei))
       ) {
         await waitForTxn(
-          await daiContract.write('approve', [betContract.address, amountWei])
+          await daiContract.write('approve', [
+            betContract.address,
+            bn(amountWei),
+          ])
         );
       }
       const txHash = await betContract.write('placeBet', [
@@ -163,8 +187,6 @@
       ]);
       sl('success', 'Waiting for confirmation...');
       await waitForTxn(txHash);
-      await sleep(5000);
-      await Promise.all([loadDayInfo(), loadMyDayInfo(), loadBalance()]);
     } catch (e) {
       sl('error', e);
     } finally {
