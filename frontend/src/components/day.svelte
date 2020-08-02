@@ -71,8 +71,7 @@
 
   onMount(() => {
     addressUnSubscriber = address.subscribe(loadDayData);
-    betPlacedUnSubscriber = betContract.on('BetPlaced', loadDayData)
-      .unsubscribe;
+    betPlacedUnSubscriber = betContract.on('BetPlaced', loadDayData);
   });
 
   onDestroy(() => {
@@ -153,12 +152,12 @@
     const from = get(address);
     const amountWei = toDaiWei(amount);
 
-    console.log(
-      from,
-      betContract.address,
-      await daiContract.read('allowance', [from, betContract.address]),
-      amountWei
-    );
+    // console.log(
+    //   from,
+    //   betContract.address,
+    //   await daiContract.read('allowance', [from, betContract.address]),
+    //   amountWei
+    // );
 
     await sl(
       'info',

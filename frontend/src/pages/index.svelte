@@ -33,9 +33,8 @@
     addressUnSubscriber = address.subscribe(async () => {
       await load();
 
-      if (!loaded) {
-        betPlacedUnSubscriber = betContract.on('BetPlaced', loadBalance)
-          .unsubscribe;
+      if (get(networkInfo).networkSupported && !loaded) {
+        betPlacedUnSubscriber = betContract.on('BetPlaced', loadBalance);
       }
 
       loaded = true;

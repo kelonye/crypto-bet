@@ -60,6 +60,6 @@ export class Contract {
   }
 
   on(eventName, fn) {
-    return this.contract.events[eventName]({}, fn);
+    return this.contract.events[eventName]({}, fn).unsubscribe;
   }
 }
