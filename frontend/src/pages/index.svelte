@@ -122,6 +122,12 @@
         <button class="button is-light is-small ml-2" on:click={loadBalance}>
           REFRESH BALANCE
         </button>
+        <a
+          class="button is-light is-small ml-2"
+          href="https://ethereum.stackexchange.com/questions/82556/how-to-obtain-rinkeby-dai#answer-84720"
+          target="_blank">
+          FAUCET
+        </a>
         {#if 'localhost' === window.location.hostname}
           <button class="button is-light is-small ml-2" on:click={recordPrice}>
             RECORD
