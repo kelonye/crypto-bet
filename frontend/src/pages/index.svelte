@@ -40,7 +40,7 @@
       loaded = true;
     });
     autoReload(() => {
-      window.reload();
+      window.location.reload();
     });
   });
 
