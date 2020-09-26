@@ -82,3 +82,10 @@ function sequentialPromise(promiseArray) {
   );
   return result.chain.then(() => result.results);
 }
+
+
+export function completeBoot() {
+  document.documentElement.classList.remove('booting');
+  document.getElementById('loader-container').remove();
+  document.getElementById('root').style.display = 'block';
+}

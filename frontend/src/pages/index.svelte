@@ -15,7 +15,7 @@
     betContract,
     networkInfo,
   } from '../stores/blockchain';
-  import { fromDaiWei, toDaiWei, sl, sleep, autoReload } from '../utils';
+  import { fromDaiWei, toDaiWei, sl, sleep, autoReload, completeBoot } from '../utils';
 
   const tomorrow = moment.utc();
   const today = moment.utc().subtract(1, 'days');
@@ -31,6 +31,11 @@
 
   onMount(() => {
     addressUnSubscriber = address.subscribe(async () => {
+      if (addressUnSubscriber) {
+        addressUnSubscriber();
+        addressUnSubscriber = null;
+        return;
+      }
       await load();
 
       if (get(networkInfo).networkSupported && !loaded) {
@@ -38,6 +43,9 @@
       }
 
       loaded = true;
+    
+      completeBoot();
+
     });
     autoReload(() => {
       window.location.reload();
@@ -45,7 +53,7 @@
   });
 
   onDestroy(() => {
-    addressUnSubscriber();
+    addressUnSubscriber && addressUnSubscriber();
     betPlacedUnSubscriber && betPlacedUnSubscriber();
   });
 
